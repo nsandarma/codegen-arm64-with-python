@@ -140,68 +140,52 @@ class Codegen:
 
   def generate(self) -> str:
     lines = [".section __TEXT,__text", ".global _main", "", "_main:"]
-    for instr in self.instructions:
-      lines.append(instr.emit())
-    emit = "\n".join(lines)
-    return emit
+    for instr in self.instructions: lines.append(instr.emit())
+    return "\n".join(lines)
 
-  def running(self, asm_code: str = None):
-    if asm_code is None: asm_code = self.generate()
+  def run(self, asm_code: str = None):
     with tempfile.TemporaryDirectory() as tmpdir:
-      asm_path = os.path.join(tmpdir, "program.s")
-      obj_path = os.path.join(tmpdir, "program.o")
-      exe_path = os.path.join(tmpdir, "program")
-      with open(asm_path, "w") as f:
-        f.write(asm_code)
-      subprocess.run(["as", "-o", obj_path, asm_path], check=True)
-      subprocess.run([
-          "ld", "-o", exe_path, obj_path,
-          "-lSystem", "-syslibroot", "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
-          "-e", "_main"
-      ], check=True)
+      exe_path = os.path.join(tmpdir,"a")
+      self.compile(exe_path,asm_code=asm_code,write=False)
       result = subprocess.run([exe_path])
       print(f"\n[INFO] Return code: {result.returncode}")
 
-  def compile(self, asm_code:str=None, out_name: str = "executable"):
+  def compile(self,filename:str="a", asm_code:str=None,write:bool=True):
     asm_code = self.generate() if asm_code is None else asm_code
-    with tempfile.TemporaryDirectory() as tmpdir:
-      try:
-        asm_path = os.path.join(tmpdir, "program.s")
-        obj_path = os.path.join(tmpdir, "program.o")
-        exe_dir = "build"
-        exe_path = os.path.join(exe_dir, out_name)
+    dir = "build"
+    if dir == "build": os.makedirs(dir, exist_ok=True)
+    if not write: dir = filename
+    try:
+      asm_path = os.path.join(dir, f"{filename}.s")
+      obj_path = os.path.join(dir, f"{filename}.o")
+      exe_path = os.path.join(dir, filename)
 
-        # Pastikan direktori output ada
-        os.makedirs(exe_dir, exist_ok=True)
+      with open(asm_path,"w") as f: f.write(asm_code)
 
-        # Tulis file assembly
-        with open(asm_path, "w") as f:
-          f.write(asm_code)
+      # Compile dengan assembler
+      subprocess.run(["as", "-o", obj_path, asm_path], check=True)
 
-        # Compile dengan assembler
-        subprocess.run(["as", "-o", obj_path, asm_path], check=True)
+      # Link menjadi executable
+      result = subprocess.run(
+        [
+          "ld", "-o", exe_path, obj_path,
+          "-lSystem", "-syslibroot", "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+          "-e", "_main"
+        ],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        check=True, text=True
+      )
 
-        # Link menjadi executable
-        result = subprocess.run(
-          [
-            "ld", "-o", exe_path, obj_path,
-            "-lSystem", "-syslibroot", "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
-            "-e", "_main"
-          ],
-          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-          check=True, text=True
-        )
-
-        print(f"\n[INFO] Executable created: {exe_path}")
-        if result.stdout:
-          print("[stdout]:", result.stdout)
-        if result.stderr:
-          print("[stderr]:", result.stderr)
-
-      except subprocess.CalledProcessError as e:
-        print(f"[ERROR] Compilation failed:\n{e.stderr}")
-      except Exception as e:
-        print(f"[ERROR] Unexpected error:\n{e}")
+      print(f"\n[INFO] Executable created: {exe_path}")
+      if result.stdout:
+        print("[stdout]:", result.stdout)
+      if result.stderr:
+        print("[stderr]:", result.stderr)
+      if not write:return exe_path
+    except subprocess.CalledProcessError as e:
+      print(f"[ERROR] Compilation failed:\n{e.stderr}")
+    except Exception as e:
+      print(f"[ERROR] Unexpected error:\n{e}")
   
   def allocate_stack(self,n_size:int):
     n_size = self.alloc_size(n_size)
@@ -282,7 +266,7 @@ if __name__ == "__main__":
     essentially unchanged. It was popularised in the 1960s with
     the release of Letraset sheets containing Lorem Ipsum passages,
     and more recently with desktop publishing software like Aldus PageMaker
-    including versions of Lorem Ipsum.
+    including versions of Lorem Ipsum.\n
     """
   cg = TemplateInstruction.print_str(text)
-  cg.running()
+  cg.compile()
